@@ -162,8 +162,8 @@ export function renderSite(t) {
             <li>Te decimos el precio antes de empezar</li>
           </ul>
           <div class="cta">
-            <a class="btn btn-copper btn-lg" href="${tel(p1)}">Pedir precio</a>
-            <a class="btn btn-wa btn-lg" href="${esc(wa(w.whatsapp, 'Hola, vengo de la web. Necesito un vaciado. ¿Podéis darme precio?'))}" target="_blank" rel="noopener">Enviar fotos por WhatsApp</a>
+            <a class="btn btn-wa btn-lg" href="${esc(wa(w.whatsapp, 'Hola, vengo de la web. Necesito un vaciado. ¿Podéis darme precio? Os mando fotos.'))}" target="_blank" rel="noopener">${svg(ICON_WA, 'ico')} Pedir precio por WhatsApp</a>
+            <a class="btn btn-copper btn-lg" href="${tel(p1)}">${svg(ICON_PHONE, 'ico')} Llamar</a>
           </div>
         </div>
         <div class="clear-side">
