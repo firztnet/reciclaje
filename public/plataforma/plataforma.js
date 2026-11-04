@@ -60,6 +60,7 @@ async function boot() {
 function render() {
   window.scrollTo(0, 0);
   if (st.tab === 'clientes') return st.open ? renderFicha(st.open) : renderTenants();
+  if (st.tab === 'comunicados') return renderNews();
   if (st.tab === 'actividad') return renderActivity();
   return renderAccount();
 }
@@ -422,6 +423,98 @@ async function renderFicha(id) {
       toast(`${t.name} eliminado. Su ficha queda guardada aparte.`);
       render();
     } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+/* ---------- Comunicados ---------- */
+
+const NEWS = { mantenimiento: ['🛠', 'Mantenimiento'], aviso: ['⚠', 'Aviso'], novedad: ['✨', 'Novedad'] };
+const localInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Texto listo para pegar en WhatsApp a los clientes que no usan el panel
+const whatsappText = (n) => `*${n.title}*\n${capital(n.when)}.${n.body ? `\n\n${n.body}` : ''}\n\n— Firztnet`;
+
+async function renderNews() {
+  const view = $('#view');
+  const list = await api('/announcements');
+  const now = Date.now();
+  const stateOf = (n) => (n.cancelled_at ? ['Retirado', 'off'] : Date.parse(n.ends_at) <= now ? ['Terminado', 'off']
+    : n.starts_at && Date.parse(n.starts_at) <= now ? ['En curso', 'on'] : ['Visible', 'on']);
+  view.innerHTML = `<div class="pf-head"><h1>Comunicados</h1><button class="btn primary" data-new-news>+ Nuevo comunicado</button></div>
+    <p class="muted">Lo que publiques aquí lo ven todos tus clientes en su panel hasta la fecha de fin. Si marcas
+      «Mostrar también en sus webs», sale además como franja amarilla arriba de todas las webs. A quien no use el panel,
+      mándaselo por WhatsApp con «Copiar para WhatsApp».</p>
+    ${list.length ? `<div class="pf-news">${list.map((n) => {
+      const [label, cls] = stateOf(n);
+      return `<article class="panel pf-news-item ${cls}">
+        <div><span class="st ${cls === 'on' ? 'activo' : 'suspendido'}">${label}</span> <strong>${NEWS[n.kind][0]} ${esc(n.title)}</strong>
+          ${n.show_on_web ? '<span class="tag warn">También en las webs</span>' : ''}
+          <p class="muted small">${esc(capital(n.when))} · publicado ${dateTime(n.created_at)}${n.admin_name ? ` por ${esc(n.admin_name)}` : ''}</p>
+          ${n.body ? `<p>${esc(n.body)}</p>` : ''}</div>
+        <div class="head-actions">
+          ${cls === 'on' ? `<button class="btn ghost small" data-copy-news="${n.id}">Copiar para WhatsApp</button>
+          <button class="btn danger small" data-cancel-news="${n.id}">Retirar</button>` : ''}
+        </div>
+      </article>`;
+    }).join('')}</div>` : '<p class="empty-state">Todavía no has publicado ningún comunicado.</p>'}`;
+  $('[data-new-news]', view).addEventListener('click', newNews);
+  $$('[data-copy-news]', view).forEach((b) => b.addEventListener('click', async () => {
+    const n = list.find((x) => x.id === Number(b.dataset.copyNews));
+    try { await navigator.clipboard.writeText(whatsappText(n)); toast('Copiado: pégalo en WhatsApp'); } catch { toast('No se pudo copiar', 'error'); }
+  }));
+  $$('[data-cancel-news]', view).forEach((b) => b.addEventListener('click', async () => {
+    if (!window.confirm('¿Retirar este comunicado? Dejará de verse en los paneles y en las webs.')) return;
+    try { await api(`/announcements/${b.dataset.cancelNews}/cancel`, { method: 'POST' }); toast('Comunicado retirado'); renderNews(); } catch (err) { toast(err.message, 'error'); }
+  }));
+}
+
+function newNews() {
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(2, 0, 0, 0);
+  const until = new Date(tomorrow); until.setHours(4);
+  const week = new Date(); week.setDate(week.getDate() + 7); week.setHours(23, 59, 0, 0);
+  const dlg = openDialog(`<form method="dialog" novalidate>
+    <div class="dlg-head"><h2>Nuevo comunicado</h2><button type="button" class="btn ghost small" data-close>Cerrar</button></div>
+    <div class="form-grid">
+      <label class="field full"><span>Tipo</span><select name="kind">
+        <option value="mantenimiento">🛠 Mantenimiento (con día y hora)</option><option value="aviso">⚠ Aviso</option><option value="novedad">✨ Novedad</option></select></label>
+      <label class="field full"><span>Título</span><input name="title" value="Mantenimiento programado" required maxlength="120"></label>
+      <label class="field full"><span>Mensaje</span><textarea name="body" rows="3" maxlength="1000">Durante ese rato la web puede no estar disponible unos minutos.</textarea></label>
+      <label class="field" data-when-maint><span>Empieza</span><input name="starts_at" type="datetime-local" value="${localInput(tomorrow)}"></label>
+      <label class="field" data-when-maint><span>Termina</span><input name="ends_at_m" type="datetime-local" value="${localInput(until)}"></label>
+      <label class="field full" data-when-other hidden><span>Se ve hasta</span><input name="ends_at_o" type="datetime-local" value="${localInput(week)}"></label>
+      <label class="check full"><input type="checkbox" name="show_on_web"> Mostrar también en sus webs (franja amarilla arriba, para los visitantes)</label>
+    </div>
+    <p class="muted small">Lo verán todos tus clientes en su panel en cuanto lo publiques, hasta la fecha de fin.</p>
+    <p class="form-error" data-error hidden></p>
+    <div class="dlg-foot"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary" value="ok">Publicar a todos</button></div>
+  </form>`);
+  const form = $('form', dlg);
+  const sync = () => {
+    const maint = form.kind.value === 'mantenimiento';
+    $$('[data-when-maint]', form).forEach((el) => { el.hidden = !maint; });
+    $('[data-when-other]', form).hidden = maint;
+  };
+  form.kind.addEventListener('change', () => {
+    sync();
+    if (form.kind.value !== 'mantenimiento' && form.title.value === 'Mantenimiento programado') form.title.value = '';
+  });
+  sync();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const error = $('[data-error]', form);
+    error.hidden = true;
+    const maint = form.kind.value === 'mantenimiento';
+    const iso = (value) => (value ? new Date(value).toISOString() : '');
+    try {
+      await api('/announcements', { method: 'POST', body: {
+        kind: form.kind.value, title: form.title.value, body: form.body.value, show_on_web: form.show_on_web.checked,
+        starts_at: maint ? iso(form.starts_at.value) : null,
+        ends_at: iso(maint ? form.ends_at_m.value : form.ends_at_o.value),
+      } });
+      dlg.close();
+      toast('Comunicado publicado');
+      renderNews();
+    } catch (err) { error.textContent = err.message; error.hidden = false; }
   });
 }
 

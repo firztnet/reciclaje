@@ -87,6 +87,21 @@ const MIGRATIONS = [
      created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
    );
    CREATE INDEX idx_photos_tenant ON photos (tenant_id, id);`,
+
+  // 3 · Comunicados a todos los clientes (mantenimientos, avisos, novedades)
+  `CREATE TABLE announcements (
+     id            INTEGER PRIMARY KEY,
+     kind          TEXT NOT NULL CHECK (kind IN ('mantenimiento', 'aviso', 'novedad')),
+     title         TEXT NOT NULL,
+     body          TEXT NOT NULL DEFAULT '',
+     starts_at     TEXT,
+     ends_at       TEXT NOT NULL,
+     show_on_web   INTEGER NOT NULL DEFAULT 0,
+     created_by    INTEGER REFERENCES superadmins(id),
+     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+     cancelled_at  TEXT
+   );
+   CREATE INDEX idx_announcements_ends ON announcements (ends_at);`,
 ];
 
 export function openControl(dataDir) {

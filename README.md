@@ -26,6 +26,9 @@ Manuel (cabecera, recogida, vaciados, formulario a WhatsApp, zonas, opiniones, t
 - **Panel del titular**: con su correo, el alta le da una clave temporal (se ve una sola vez, con botón para
   copiarla). Al entrar la primera vez elige la suya. Desde la ficha puedes darle una clave nueva si la olvida
   (se cierran sus sesiones). Lo que cambia el titular queda en la actividad.
+- **Comunicados** a todos los clientes (mantenimiento con día y hora, aviso o novedad): salen en el panel de cada
+  titular y, si lo marcas, como franja amarilla arriba de todas las webs. Con «Copiar para WhatsApp» se lo mandas a
+  quien no usa el panel. Se retiran cuando quieras y dejan de verse solos al pasar la fecha de fin.
 - **Estados**: en prueba hasta una fecha, activo con renovación opcional, o suspendido con motivo. Suspendido o
   con la prueba terminada, su web muestra un aviso; su ficha se conserva y al activarlo todo vuelve como estaba.
 - **Eliminar**: solo si está suspendido y escribiendo su subdominio. La ficha se guarda aparte (`deleted_tenants`).

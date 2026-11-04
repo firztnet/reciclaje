@@ -67,7 +67,16 @@ function render() {
   const a = st.me.tenant.access;
   view.innerHTML = `${a.state === 'prueba' && a.days_left !== null
     ? `<div class="banner">Estás en el periodo de prueba: ${a.days_left === 0 ? 'termina hoy' : `quedan ${a.days_left} día${a.days_left === 1 ? '' : 's'}`}. Para seguir después, habla con quien te hizo la web.</div>` : ''}
+    <div class="news" data-news></div>
     <div data-editor></div>`;
+  // Comunicados de la plataforma (mantenimientos, avisos), arriba del todo
+  api('/announcements').then((list) => {
+    const box = $('[data-news]', view);
+    if (!box) return;
+    const icon = { mantenimiento: '🛠', aviso: '⚠', novedad: '✨' };
+    box.innerHTML = list.map((n) => `<div class="banner"><strong>${icon[n.kind]} ${esc(n.title)}</strong> · ${esc(n.when.charAt(0).toUpperCase() + n.when.slice(1))}
+      ${n.body ? `<p>${esc(n.body)}</p>` : ''}</div>`).join('');
+  }).catch(() => {});
   mountWebEditor($('[data-editor]', view), {
     web: st.me.web,
     photos: st.me.photos,

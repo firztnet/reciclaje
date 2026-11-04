@@ -70,6 +70,17 @@ p { margin: 0 0 1em; }
 .btn-wa { background: var(--wa); color: #fff; }
 .ico { width: 1.15em; height: 1.15em; fill: currentColor; flex: none; }
 
+/* Aviso de la plataforma (mantenimiento, etc.) encima de todo */
+.site-notice {
+  padding: .55em 16px;
+  background: #e3b341;
+  color: #14171a;
+  font-size: .88rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
 /* Cabecera */
 .topbar {
   display: flex;

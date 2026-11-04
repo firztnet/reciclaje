@@ -10,6 +10,7 @@ import { ROOT } from './config.mjs';
 import { createAdminApi } from './admin.mjs';
 import { createPanelApi } from './panel.mjs';
 import { photoPath } from './photos.mjs';
+import { activeAnnouncements, whenText } from './announcements.mjs';
 import { HttpError } from './security.mjs';
 import { accessOf, countVisit, findTenant } from './tenants.mjs';
 import { SITE_CSP, esc, renderCartel, renderDatos, renderNotice, renderSite, renderTema } from './web.mjs';
@@ -186,7 +187,8 @@ export function createServer(control, config) {
     const page = (body, type) => send(res, 200, body, headers(SITE_CSP, { 'Content-Type': type, 'Cache-Control': 'no-cache' }));
     if (p === '/' || p === '/index.html') {
       if (req.method === 'GET') countVisit(control, t);
-      page(renderSite(t), TYPES['.html']);
+      const notices = activeAnnouncements(control, { webOnly: true }).map((a) => ({ ...a, when: whenText(a) }));
+      page(renderSite(t, notices), TYPES['.html']);
       return;
     }
     if (p === '/datos.js') { page(renderDatos(t), TYPES['.js']); return; }

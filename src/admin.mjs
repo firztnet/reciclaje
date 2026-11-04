@@ -9,6 +9,7 @@ import {
 } from './tenants.mjs';
 import * as v from './validate.mjs';
 import { grantOwner, ownerSummary } from './owners.mjs';
+import { cancelAnnouncement, createAnnouncement, whenText } from './announcements.mjs';
 import { deletePhoto, listPhotos, photoRefs, savePhoto } from './photos.mjs';
 
 export const ADMIN_COOKIE = 'chsid';
@@ -188,6 +189,22 @@ export function createAdminApi(control, config) {
       const t = getTenant(control, idOf(params.id));
       deletePhoto(control, config.dataDir, t, v.integer(params.pid, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'La foto' }));
       log(admin.id, t.id, `Borró una foto de «${t.name}»`);
+      return { body: { ok: true } };
+    }],
+
+    /* Comunicados a todos los clientes */
+    ['GET', '/announcements', () => ({
+      body: control.prepare(`SELECT a.*, s.name AS admin_name FROM announcements a LEFT JOIN superadmins s ON s.id = a.created_by
+        ORDER BY a.id DESC LIMIT 100`).all().map((a) => ({ ...a, when: whenText(a) })),
+    })],
+    ['POST', '/announcements', (req, { body, admin }) => {
+      const a = createAnnouncement(control, admin.id, body);
+      log(admin.id, null, `Publicó el comunicado «${a.title}»${a.show_on_web ? ' (también en las webs)' : ''}`);
+      return { status: 201, body: { ...a, when: whenText(a) } };
+    }],
+    ['POST', '/announcements/:id/cancel', (req, { admin, params }) => {
+      const a = cancelAnnouncement(control, v.integer(params.id, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'El comunicado' }));
+      log(admin.id, null, `Retiró el comunicado «${a.title}»`);
       return { body: { ok: true } };
     }],
 
