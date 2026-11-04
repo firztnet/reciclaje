@@ -17,8 +17,7 @@ const svg = (paths, cls = '') => `<svg${cls ? ` class="${cls}"` : ''} viewBox="0
 
 export const SITE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-// «notices»: comunicados de la plataforma marcados para verse en las webs (con su «when» ya en texto)
-export function renderSite(t, notices = []) {
+export function renderSite(t) {
   const w = webOf(t);
   const p1 = w.telefono;
   const p2 = w.telefono2;
@@ -71,7 +70,7 @@ export function renderSite(t, notices = []) {
   <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
 </head>
 <body>
-${notices.map((a) => `  <div class="site-notice" role="status"><strong>${esc(a.title)}</strong> · ${esc(a.when.charAt(0).toUpperCase() + a.when.slice(1))}${a.body ? ` · ${esc(a.body)}` : ''}</div>\n`).join('')}
+
   <div class="topbar">${[...topbar, `Toda la ${w.region}`].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>
 
   <header class="header">

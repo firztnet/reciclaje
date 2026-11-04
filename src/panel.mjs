@@ -4,7 +4,6 @@ import { FailureLimiter, HttpError, MIN_PASSWORD, badRequest, cookieHeader, forb
 import { accessOf, readWeb, webOf, SHARED_PHOTOS } from './tenants.mjs';
 import { deletePhoto, listPhotos, photoRefs, savePhoto } from './photos.mjs';
 import * as v from './validate.mjs';
-import { activeAnnouncements, whenText } from './announcements.mjs';
 
 export const OWNER_COOKIE = 'chpanel';
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -54,10 +53,6 @@ export function createPanelApi(control, config) {
     }, { free: true }],
 
     ['GET', '/me', (req, { t, owner }) => ({ body: me(t, owner) }), { first: true }],
-
-    // Comunicados vigentes de la plataforma (mantenimientos, avisos)
-    ['GET', '/announcements', () => ({ body: activeAnnouncements(control).map((a) => ({ ...a, when: whenText(a) })) }), { first: true }],
-
     ['POST', '/password', (req, { t, body, owner }) => {
       if (!verifySecret(String(body.current ?? ''), owner.password_hash)) throw forbidden('La contraseña actual no es correcta');
       const next = String(body.next ?? '');

@@ -102,6 +102,15 @@ const MIGRATIONS = [
      cancelled_at  TEXT
    );
    CREATE INDEX idx_announcements_ends ON announcements (ends_at);`,
+
+  // 4 · Los comunicados se mandan por WhatsApp: a quién se ha enviado ya cada uno
+  // (la columna show_on_web de la migración 3 ya no se usa)
+  `CREATE TABLE announcement_sends (
+     announcement_id  INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+     tenant_id        INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+     sent_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+     PRIMARY KEY (announcement_id, tenant_id)
+   );`,
 ];
 
 export function openControl(dataDir) {

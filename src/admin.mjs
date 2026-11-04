@@ -9,7 +9,7 @@ import {
 } from './tenants.mjs';
 import * as v from './validate.mjs';
 import { grantOwner, ownerSummary } from './owners.mjs';
-import { cancelAnnouncement, createAnnouncement, whenText } from './announcements.mjs';
+import { cancelAnnouncement, createAnnouncement, markSent, whatsappMessage, whenText } from './announcements.mjs';
 import { deletePhoto, listPhotos, photoRefs, savePhoto } from './photos.mjs';
 
 export const ADMIN_COOKIE = 'chsid';
@@ -192,15 +192,42 @@ export function createAdminApi(control, config) {
       return { body: { ok: true } };
     }],
 
-    /* Comunicados a todos los clientes */
-    ['GET', '/announcements', () => ({
-      body: control.prepare(`SELECT a.*, s.name AS admin_name FROM announcements a LEFT JOIN superadmins s ON s.id = a.created_by
-        ORDER BY a.id DESC LIMIT 100`).all().map((a) => ({ ...a, when: whenText(a) })),
-    })],
+    /* Comunicados a los clientes, por WhatsApp: cada uno con su lista de clientes, su mensaje y a quién se ha enviado */
+    ['GET', '/announcements', () => {
+      const tenants = control.prepare('SELECT * FROM tenants ORDER BY name COLLATE NOCASE').all();
+      const sends = control.prepare('SELECT tenant_id, sent_at FROM announcement_sends WHERE announcement_id = ?');
+      return {
+        body: control.prepare(`SELECT a.*, s.name AS admin_name FROM announcements a LEFT JOIN superadmins s ON s.id = a.created_by
+          ORDER BY a.id DESC LIMIT 100`).all().map((a) => {
+          const sent = new Map(sends.all(a.id).map((x) => [x.tenant_id, x.sent_at]));
+          return {
+            ...a,
+            when: whenText(a),
+            recipients: tenants.map((t) => {
+              const phone = t.contact_phone || webOf(t).telefono;
+              const message = whatsappMessage(a, t.contact_name);
+              return {
+                tenant_id: t.id, name: t.name, contact_name: t.contact_name, phone, state: accessOf(t).state,
+                sent_at: sent.get(t.id) ?? null, message,
+                whatsapp_url: phone ? `https://wa.me/34${phone}?text=${encodeURIComponent(message)}` : null,
+              };
+            }),
+          };
+        }),
+      };
+    }],
     ['POST', '/announcements', (req, { body, admin }) => {
       const a = createAnnouncement(control, admin.id, body);
-      log(admin.id, null, `Publicó el comunicado «${a.title}»${a.show_on_web ? ' (también en las webs)' : ''}`);
+      log(admin.id, null, `Preparó el comunicado «${a.title}»`);
       return { status: 201, body: { ...a, when: whenText(a) } };
+    }],
+    // Al pulsar «Enviar» de un cliente se apunta como enviado (el envío lo hace WhatsApp)
+    ['POST', '/announcements/:id/sent', (req, { body, admin, params }) => {
+      const id = v.integer(params.id, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'El comunicado' });
+      const t = getTenant(control, idOf(body.tenant_id));
+      markSent(control, id, t.id);
+      log(admin.id, t.id, `Mandó por WhatsApp un comunicado a «${t.name}»`);
+      return { body: { ok: true } };
     }],
     ['POST', '/announcements/:id/cancel', (req, { admin, params }) => {
       const a = cancelAnnouncement(control, v.integer(params.id, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'El comunicado' }));

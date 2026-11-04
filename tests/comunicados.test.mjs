@@ -6,20 +6,18 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openControl } from '../src/db.mjs';
 import { upsertSuperadmin } from '../src/admin.mjs';
-import { whenText } from '../src/announcements.mjs';
+import { whatsappMessage, whenText } from '../src/announcements.mjs';
 import { createServer } from '../src/server.mjs';
 
 const DOMAIN = 'reciclar.test';
 const ADMIN = `admin.${DOMAIN}`;
-const WEB = `hierros.${DOMAIN}`;
 
-describe('comunicados', () => {
-  let dir, control, server, port;
-  const jar = {};
+describe('comunicados por WhatsApp', () => {
+  let dir, control, server, port, cookie = '';
 
   const request = (host, method, urlPath, body) => new Promise((resolve, reject) => {
     const data = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
-    const headers = { Host: host, ...(jar[host] ? { Cookie: jar[host] } : {}) };
+    const headers = { Host: host, ...(cookie ? { Cookie: cookie } : {}) };
     if (method !== 'GET') headers.Origin = `http://${host}`;
     if (data) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = data.length; }
     const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers }, (res) => {
@@ -28,7 +26,7 @@ describe('comunicados', () => {
       res.on('data', (c) => { text += c; });
       res.on('end', () => {
         const set = res.headers['set-cookie']?.[0]?.split(';')[0];
-        if (set) jar[host] = set;
+        if (set) cookie = set;
         resolve({ status: res.statusCode, text, json: () => JSON.parse(text) });
       });
     });
@@ -36,7 +34,7 @@ describe('comunicados', () => {
     req.end(data);
   });
 
-  let temp;
+  let tenant;
   before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reciclar-news-'));
     control = openControl(dir);
@@ -45,8 +43,7 @@ describe('comunicados', () => {
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     port = server.address().port;
     await request(ADMIN, 'POST', '/api/admin/login', { email: 'admin@prueba.test', password: 'clave-de-prueba-1' });
-    const t = (await request(ADMIN, 'POST', '/api/admin/tenants', { name: 'Hierros', slug: 'hierros', barrio: 'Usera', telefono: '611223344', contact_name: 'Pilar', contact_email: 'pilar@h.test', trial_days: 0 })).json();
-    temp = t.owner_access.temp_password;
+    tenant = (await request(ADMIN, 'POST', '/api/admin/tenants', { name: 'Hierros', slug: 'hierros', barrio: 'Usera', telefono: '611223344', contact_name: 'Pilar Gómez', trial_days: 0 })).json();
   });
 
   after(() => {
@@ -55,39 +52,34 @@ describe('comunicados', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('las fechas salen en hora de Madrid', () => {
-    // 10 de noviembre de 2026 (invierno, UTC+1): de 02:00 a 04:00 en Madrid
-    assert.equal(whenText({ starts_at: '2026-11-10T01:00:00.000Z', ends_at: '2026-11-10T03:00:00.000Z' }), 'el martes, 10 de noviembre, de 2:00 a 4:00');
-    assert.equal(whenText({ starts_at: null, ends_at: '2026-11-20T22:59:00.000Z' }), 'hasta el viernes, 20 de noviembre');
+  test('las fechas salen en hora de Madrid y el mensaje lleva el nombre', () => {
+    const a = { kind: 'mantenimiento', title: 'Mantenimiento', body: 'Unos minutos.', starts_at: '2026-11-10T01:00:00.000Z', ends_at: '2026-11-10T03:00:00.000Z' };
+    assert.equal(whenText(a), 'el martes, 10 de noviembre, de 2:00 a 4:00');
+    assert.equal(whatsappMessage(a, 'Pilar Gómez'), 'Hola Pilar:\n\n*Mantenimiento*\nEl martes, 10 de noviembre, de 2:00 a 4:00.\n\nUnos minutos.\n\nUn saludo,\nFirztnet');
+    // Un aviso no lleva fecha: la de fin solo sirve para dejar de ofrecerlo
+    assert.doesNotMatch(whatsappMessage({ kind: 'aviso', title: 'Nuevo horario', body: '', ends_at: '2026-12-01T00:00:00.000Z' }, ''), /hasta/);
   });
 
-  test('un mantenimiento se valida, se ve en la web si se marca y se puede retirar', async () => {
+  test('se prepara, cada cliente tiene su enlace de WhatsApp y queda apuntado a quién se envió', async () => {
     const soon = Date.now() + 86_400_000;
     const iso = (ms) => new Date(ms).toISOString();
     assert.equal((await request(ADMIN, 'POST', '/api/admin/announcements', { kind: 'mantenimiento', title: 'X', starts_at: iso(soon), ends_at: iso(soon - 1000) })).status, 400);
-    assert.equal((await request(ADMIN, 'POST', '/api/admin/announcements', { kind: 'aviso', title: 'X', ends_at: iso(Date.now() - 1000) })).status, 400);
+    const a = (await request(ADMIN, 'POST', '/api/admin/announcements', { kind: 'mantenimiento', title: 'Mantenimiento', body: 'Unos minutos.', starts_at: iso(soon), ends_at: iso(soon + 7200_000) })).json();
 
-    const solo = (await request(ADMIN, 'POST', '/api/admin/announcements', { kind: 'novedad', title: 'Ya podéis subir fotos', ends_at: iso(soon) })).json();
-    const maint = await request(ADMIN, 'POST', '/api/admin/announcements', {
-      kind: 'mantenimiento', title: 'Mantenimiento <programado>', body: 'La web puede fallar unos minutos.', show_on_web: true,
-      starts_at: iso(soon), ends_at: iso(soon + 2 * 3600_000),
-    });
-    assert.equal(maint.status, 201, maint.text);
-    assert.match(maint.json().when, /^el \w+/);
+    let [item] = (await request(ADMIN, 'GET', '/api/admin/announcements')).json();
+    const [r] = item.recipients;
+    assert.equal(r.tenant_id, tenant.id);
+    assert.equal(r.sent_at, null);
+    assert.match(r.whatsapp_url, /^https:\/\/wa\.me\/34611223344\?text=Hola%20Pilar%3A/);
 
-    // Web pública: solo el marcado, escapado
-    const site = (await request(WEB, 'GET', '/')).text;
-    assert.match(site, /class="site-notice"/);
-    assert.match(site, /Mantenimiento &lt;programado&gt;/);
-    assert.doesNotMatch(site, /Ya podéis subir fotos/);
+    assert.equal((await request(ADMIN, 'POST', `/api/admin/announcements/${a.id}/sent`, { tenant_id: tenant.id })).status, 200);
+    assert.equal((await request(ADMIN, 'POST', `/api/admin/announcements/${a.id}/sent`, { tenant_id: tenant.id })).status, 200);
+    [item] = (await request(ADMIN, 'GET', '/api/admin/announcements')).json();
+    assert.ok(item.recipients[0].sent_at);
+    assert.equal((await request(ADMIN, 'POST', `/api/admin/announcements/${a.id}/sent`, { tenant_id: 9999 })).status, 404);
 
-    // Panel del titular: los dos (también antes de cambiar la clave temporal)
-    await request(WEB, 'POST', '/api/panel/login', { email: 'pilar@h.test', password: temp });
-    assert.equal((await request(WEB, 'GET', '/api/panel/announcements')).json().length, 2);
-
-    assert.equal((await request(ADMIN, 'POST', `/api/admin/announcements/${maint.json().id}/cancel`)).status, 200);
-    assert.doesNotMatch((await request(WEB, 'GET', '/')).text, /site-notice/);
-    assert.equal((await request(WEB, 'GET', '/api/panel/announcements')).json().length, 1);
-    assert.equal((await request(ADMIN, 'GET', '/api/admin/announcements')).json().find((a) => a.id === solo.id).title, 'Ya podéis subir fotos');
+    // No sale en la web pública
+    assert.doesNotMatch((await request(`hierros.${DOMAIN}`, 'GET', '/')).text, /Mantenimiento/);
+    assert.equal((await request(ADMIN, 'POST', `/api/admin/announcements/${a.id}/cancel`)).status, 200);
   });
 });

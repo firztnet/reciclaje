@@ -426,67 +426,87 @@ async function renderFicha(id) {
   });
 }
 
-/* ---------- Comunicados ---------- */
+/* ---------- Comunicados (por WhatsApp) ---------- */
 
 const NEWS = { mantenimiento: ['🛠', 'Mantenimiento'], aviso: ['⚠', 'Aviso'], novedad: ['✨', 'Novedad'] };
 const localInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-// Texto listo para pegar en WhatsApp a los clientes que no usan el panel
-const whatsappText = (n) => `*${n.title}*\n${capital(n.when)}.${n.body ? `\n\n${n.body}` : ''}\n\n— Firztnet`;
 
 async function renderNews() {
   const view = $('#view');
   const list = await api('/announcements');
   const now = Date.now();
-  const stateOf = (n) => (n.cancelled_at ? ['Retirado', 'off'] : Date.parse(n.ends_at) <= now ? ['Terminado', 'off']
-    : n.starts_at && Date.parse(n.starts_at) <= now ? ['En curso', 'on'] : ['Visible', 'on']);
+  const stateOf = (n) => (n.cancelled_at ? ['Retirado', 'off'] : Date.parse(n.ends_at) <= now ? ['Pasado', 'off'] : ['Vigente', 'on']);
   view.innerHTML = `<div class="pf-head"><h1>Comunicados</h1><button class="btn primary" data-new-news>+ Nuevo comunicado</button></div>
-    <p class="muted">Lo que publiques aquí lo ven todos tus clientes en su panel hasta la fecha de fin. Si marcas
-      «Mostrar también en sus webs», sale además como franja amarilla arriba de todas las webs. A quien no use el panel,
-      mándaselo por WhatsApp con «Copiar para WhatsApp».</p>
+    <p class="muted">Los comunicados se mandan por WhatsApp. Cada uno tiene la lista de tus clientes: pulsa <strong>Enviar</strong>
+      y se abre WhatsApp en su número con el mensaje ya escrito, con su nombre. Aquí queda apuntado a quién se lo has mandado.</p>
     ${list.length ? `<div class="pf-news">${list.map((n) => {
       const [label, cls] = stateOf(n);
-      return `<article class="panel pf-news-item ${cls}">
+      const sent = n.recipients.filter((r) => r.sent_at).length;
+      return `<article class="panel pf-news-item ${cls}" data-news="${n.id}">
         <div><span class="st ${cls === 'on' ? 'activo' : 'suspendido'}">${label}</span> <strong>${NEWS[n.kind][0]} ${esc(n.title)}</strong>
-          ${n.show_on_web ? '<span class="tag warn">También en las webs</span>' : ''}
-          <p class="muted small">${esc(capital(n.when))} · publicado ${dateTime(n.created_at)}${n.admin_name ? ` por ${esc(n.admin_name)}` : ''}</p>
+          <span class="tag ${sent === n.recipients.length && sent ? 'ok' : 'warn'}">Enviado a ${sent} de ${n.recipients.length}</span>
+          <p class="muted small">${n.kind === 'mantenimiento' ? `${esc(capital(n.when))} · ` : ''}preparado ${dateTime(n.created_at)}${n.admin_name ? ` por ${esc(n.admin_name)}` : ''}</p>
           ${n.body ? `<p>${esc(n.body)}</p>` : ''}</div>
         <div class="head-actions">
-          ${cls === 'on' ? `<button class="btn ghost small" data-copy-news="${n.id}">Copiar para WhatsApp</button>
-          <button class="btn danger small" data-cancel-news="${n.id}">Retirar</button>` : ''}
+          <button class="btn ghost small" data-toggle-sends>${cls === 'on' ? 'Enviar por WhatsApp' : 'Ver envíos'}</button>
+          ${cls === 'on' ? '<button class="btn danger small" data-cancel-news>Retirar</button>' : ''}
+        </div>
+        <div class="sends" data-sends hidden>
+          <h4>Mensaje (lleva el nombre de cada cliente)</h4>
+          <pre class="preview">${esc(n.recipients[0]?.message ?? '')}</pre>
+          <h4>Clientes</h4>
+          ${n.recipients.length ? n.recipients.map((r) => `<div class="send-row">
+            <span class="who"><strong>${esc(r.name)}</strong><small>${esc(r.contact_name || '—')} · ${esc(fmtPhone(r.phone) || 'sin teléfono')} · ${STATE[r.state]}</small></span>
+            ${r.sent_at ? `<span class="tag ok">✓ Enviado ${dateTime(r.sent_at)}</span>` : ''}
+            ${r.whatsapp_url && cls === 'on'
+              ? `<a class="btn ${r.sent_at ? 'ghost' : 'wa'} small" href="${esc(r.whatsapp_url)}" target="_blank" rel="noopener" data-send="${r.tenant_id}">${r.sent_at ? 'Enviar otra vez' : 'Enviar'}</a>`
+              : ''}
+          </div>`).join('') : '<p class="muted small">Todavía no tienes clientes.</p>'}
         </div>
       </article>`;
-    }).join('')}</div>` : '<p class="empty-state">Todavía no has publicado ningún comunicado.</p>'}`;
+    }).join('')}</div>` : '<p class="empty-state">Todavía no has preparado ningún comunicado.</p>'}`;
+
   $('[data-new-news]', view).addEventListener('click', newNews);
-  $$('[data-copy-news]', view).forEach((b) => b.addEventListener('click', async () => {
-    const n = list.find((x) => x.id === Number(b.dataset.copyNews));
-    try { await navigator.clipboard.writeText(whatsappText(n)); toast('Copiado: pégalo en WhatsApp'); } catch { toast('No se pudo copiar', 'error'); }
-  }));
-  $$('[data-cancel-news]', view).forEach((b) => b.addEventListener('click', async () => {
-    if (!window.confirm('¿Retirar este comunicado? Dejará de verse en los paneles y en las webs.')) return;
-    try { await api(`/announcements/${b.dataset.cancelNews}/cancel`, { method: 'POST' }); toast('Comunicado retirado'); renderNews(); } catch (err) { toast(err.message, 'error'); }
-  }));
+  $$('[data-news]', view).forEach((card) => {
+    const id = Number(card.dataset.news);
+    $('[data-toggle-sends]', card).addEventListener('click', () => { const s = $('[data-sends]', card); s.hidden = !s.hidden; });
+    $('[data-cancel-news]', card)?.addEventListener('click', async () => {
+      if (!window.confirm('¿Retirar este comunicado? Ya no podrás enviarlo desde aquí.')) return;
+      try { await api(`/announcements/${id}/cancel`, { method: 'POST' }); toast('Comunicado retirado'); renderNews(); } catch (err) { toast(err.message, 'error'); }
+    });
+    // El enlace abre WhatsApp (lo hace el navegador); a la vez se apunta como enviado
+    $$('[data-send]', card).forEach((a) => a.addEventListener('click', () => {
+      api(`/announcements/${id}/sent`, { method: 'POST', body: { tenant_id: Number(a.dataset.send) } })
+        .then(() => {
+          const row = a.closest('.send-row');
+          if (!row.querySelector('.tag.ok')) a.insertAdjacentHTML('beforebegin', '<span class="tag ok">✓ Enviado ahora</span>');
+          a.className = 'btn ghost small';
+          a.textContent = 'Enviar otra vez';
+        })
+        .catch((err) => toast(err.message, 'error'));
+    }));
+  });
 }
 
 function newNews() {
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(2, 0, 0, 0);
   const until = new Date(tomorrow); until.setHours(4);
-  const week = new Date(); week.setDate(week.getDate() + 7); week.setHours(23, 59, 0, 0);
+  const month = new Date(); month.setDate(month.getDate() + 30); month.setHours(23, 59, 0, 0);
   const dlg = openDialog(`<form method="dialog" novalidate>
     <div class="dlg-head"><h2>Nuevo comunicado</h2><button type="button" class="btn ghost small" data-close>Cerrar</button></div>
     <div class="form-grid">
       <label class="field full"><span>Tipo</span><select name="kind">
         <option value="mantenimiento">🛠 Mantenimiento (con día y hora)</option><option value="aviso">⚠ Aviso</option><option value="novedad">✨ Novedad</option></select></label>
-      <label class="field full"><span>Título</span><input name="title" value="Mantenimiento programado" required maxlength="120"></label>
-      <label class="field full"><span>Mensaje</span><textarea name="body" rows="3" maxlength="1000">Durante ese rato la web puede no estar disponible unos minutos.</textarea></label>
+      <label class="field full"><span>Título</span><input name="title" value="Mantenimiento programado de tu web" required maxlength="120"></label>
+      <label class="field full"><span>Mensaje</span><textarea name="body" rows="3" maxlength="1000">Durante ese rato tu web puede no estar disponible unos minutos. No tienes que hacer nada; si después ves algo raro, avísame.</textarea></label>
       <label class="field" data-when-maint><span>Empieza</span><input name="starts_at" type="datetime-local" value="${localInput(tomorrow)}"></label>
       <label class="field" data-when-maint><span>Termina</span><input name="ends_at_m" type="datetime-local" value="${localInput(until)}"></label>
-      <label class="field full" data-when-other hidden><span>Se ve hasta</span><input name="ends_at_o" type="datetime-local" value="${localInput(week)}"></label>
-      <label class="check full"><input type="checkbox" name="show_on_web"> Mostrar también en sus webs (franja amarilla arriba, para los visitantes)</label>
+      <label class="field full" data-when-other hidden><span>Se puede enviar hasta</span><input name="ends_at_o" type="datetime-local" value="${localInput(month)}"></label>
     </div>
-    <p class="muted small">Lo verán todos tus clientes en su panel en cuanto lo publiques, hasta la fecha de fin.</p>
+    <p class="muted small">Al guardarlo, en su tarjeta tendrás la lista de clientes con el botón «Enviar» de cada uno.</p>
     <p class="form-error" data-error hidden></p>
-    <div class="dlg-foot"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary" value="ok">Publicar a todos</button></div>
+    <div class="dlg-foot"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary" value="ok">Preparar el envío</button></div>
   </form>`);
   const form = $('form', dlg);
   const sync = () => {
@@ -496,7 +516,7 @@ function newNews() {
   };
   form.kind.addEventListener('change', () => {
     sync();
-    if (form.kind.value !== 'mantenimiento' && form.title.value === 'Mantenimiento programado') form.title.value = '';
+    if (form.kind.value !== 'mantenimiento' && form.title.value === 'Mantenimiento programado de tu web') { form.title.value = ''; form.body.value = ''; }
   });
   sync();
   form.addEventListener('submit', async (e) => {
@@ -506,14 +526,16 @@ function newNews() {
     const maint = form.kind.value === 'mantenimiento';
     const iso = (value) => (value ? new Date(value).toISOString() : '');
     try {
-      await api('/announcements', { method: 'POST', body: {
-        kind: form.kind.value, title: form.title.value, body: form.body.value, show_on_web: form.show_on_web.checked,
+      const created = await api('/announcements', { method: 'POST', body: {
+        kind: form.kind.value, title: form.title.value, body: form.body.value,
         starts_at: maint ? iso(form.starts_at.value) : null,
         ends_at: iso(maint ? form.ends_at_m.value : form.ends_at_o.value),
       } });
       dlg.close();
-      toast('Comunicado publicado');
-      renderNews();
+      toast('Comunicado listo: ahora envíaselo a cada cliente');
+      await renderNews();
+      const card = $(`[data-news="${created.id}"]`);
+      if (card) $('[data-sends]', card).hidden = false;
     } catch (err) { error.textContent = err.message; error.hidden = false; }
   });
 }
