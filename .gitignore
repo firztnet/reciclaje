@@ -1,0 +1,6 @@
+data/
+data-demo/
+.env
+.env.*
+!.env.demo
+.claude/

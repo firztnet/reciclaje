@@ -1,0 +1,16 @@
+{
+  "name": "plataforma-reciclaje",
+  "version": "0.1.0",
+  "description": "Plataforma de reciclaje: superadministrador para dar de alta clientes y una web por subdominio para cada uno.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.mjs",
+    "demo": "node --disable-warning=ExperimentalWarning src/cli/demo.mjs",
+    "start:demo": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.demo src/index.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.mjs\""
+  }
+}

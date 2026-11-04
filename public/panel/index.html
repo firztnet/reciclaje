@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#101316">
+  <title>Mi panel</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/ui.css">
+</head>
+<body>
+  <!-- Entrar -->
+  <section class="login" id="login" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="brand"><img src="/favicon.svg" alt="" width="42" height="42"><div><small>Panel del titular</small><strong data-business>Tu web</strong></div></div>
+      <h1>Entra en tu panel</h1>
+      <p class="muted">Desde aquí cambias tu web: teléfonos, fotos, zonas, opiniones y trabajos.</p>
+      <label class="field"><span>Correo</span><input name="email" type="email" required autocomplete="username"></label>
+      <label class="field"><span>Contraseña</span><input name="password" type="password" required autocomplete="current-password"></label>
+      <p class="form-error" id="loginError" role="alert" hidden></p>
+      <button class="btn primary">Entrar</button>
+      <p class="muted small">¿Has olvidado la clave? Pídele una nueva a quien te hizo la web.</p>
+    </form>
+  </section>
+
+  <!-- Primera vez: elegir clave propia -->
+  <section class="login" id="first" hidden>
+    <form class="login-card" id="firstForm">
+      <div class="brand"><img src="/favicon.svg" alt="" width="42" height="42"><div><small>Panel del titular</small><strong data-business>Tu web</strong></div></div>
+      <h1>Elige tu contraseña</h1>
+      <p class="muted">Es la primera vez que entras: cambia la clave temporal por una tuya. Mínimo 10 caracteres.</p>
+      <label class="field"><span>Clave temporal</span><input name="current" type="password" required autocomplete="current-password"></label>
+      <label class="field"><span>Tu nueva contraseña</span><input name="next" type="password" required minlength="10" autocomplete="new-password"></label>
+      <label class="field"><span>Repítela</span><input name="again" type="password" required minlength="10" autocomplete="new-password"></label>
+      <p class="form-error" id="firstError" role="alert" hidden></p>
+      <button class="btn primary">Guardar y entrar</button>
+    </form>
+  </section>
+
+  <!-- Panel -->
+  <div class="pf" id="app" hidden>
+    <header class="pf-top">
+      <div class="brand"><img src="/favicon.svg" alt="" width="36" height="36"><div><strong data-business>Tu web</strong><small>Mi panel</small></div></div>
+      <nav class="pf-tabs" id="tabs" aria-label="Secciones">
+        <button class="on" data-tab="web">Mi web</button>
+        <button data-tab="cuenta">Mi cuenta</button>
+      </nav>
+      <div class="pf-user"><a class="btn ghost small" href="/" target="_blank" rel="noopener">Ver mi web</a><button class="btn ghost small" id="logout">Salir</button></div>
+    </header>
+    <main class="pf-main narrow-main" id="view"></main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

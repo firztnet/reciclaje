@@ -1,0 +1,44 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#101316">
+  <title>Superadministrador · Plataforma de reciclaje</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/shared/ui.css">
+</head>
+<body>
+  <!-- Acceso -->
+  <section class="login" id="login" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="brand"><img src="favicon.svg" alt="" width="42" height="42"><div><small>Superadministrador</small><strong>Plataforma de reciclaje</strong></div></div>
+      <h1>Acceso de control</h1>
+      <p class="muted">Solo para quien gestiona los clientes de la plataforma.</p>
+      <label class="field"><span>Correo</span><input name="email" type="email" required autocomplete="username"></label>
+      <label class="field"><span>Contraseña</span><input name="password" type="password" required autocomplete="current-password"></label>
+      <p class="form-error" id="loginError" role="alert" hidden></p>
+      <button class="btn primary">Entrar</button>
+    </form>
+  </section>
+
+  <!-- Panel -->
+  <div class="pf" id="app" hidden>
+    <header class="pf-top">
+      <div class="brand"><img src="favicon.svg" alt="" width="36" height="36"><div><strong>Reciclaje</strong><small>Superadministrador</small></div></div>
+      <nav class="pf-tabs" id="tabs" aria-label="Secciones">
+        <button class="on" data-tab="clientes">Clientes</button>
+        <button data-tab="actividad">Actividad</button>
+        <button data-tab="cuenta">Mi cuenta</button>
+      </nav>
+      <div class="pf-user"><span id="adminName"></span><button class="btn ghost small" id="logout">Salir</button></div>
+    </header>
+    <main class="pf-main" id="view"></main>
+  </div>
+
+  <dialog id="modal"></dialog>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="plataforma.js"></script>
+</body>
+</html>
