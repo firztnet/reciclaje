@@ -103,7 +103,7 @@ export function createAdminApi(control, config) {
       const own = (ref) => typeof ref === 'string' && ref.startsWith('fotos/');
       const input = readNewTenant({
         slug: body.slug || f.slug, name: f.name, barrio: w.barrio, telefono: w.telefono, telefono2: w.telefono2,
-        contact_name: f.contact_name || f.name, contact_email: f.contact_email, trial_days: body.trial_days ?? 0,
+        contact_name: f.contact_name || f.name, contact_email: body.contact_email ?? f.contact_email, trial_days: body.trial_days ?? 0,
         company_name: f.company_name, tax_id: f.tax_id, notes: f.notes,
       });
       const web = readWeb({
@@ -170,7 +170,8 @@ export function createAdminApi(control, config) {
     ['POST', '/tenants/:id/owner', (req, { body, admin, params }) => {
       const t = getTenant(control, idOf(params.id));
       const access = grantOwner(control, t, { name: body.name || t.contact_name, email: body.email || t.contact_email });
-      if (!t.contact_email) control.prepare('UPDATE tenants SET contact_email = ? WHERE id = ?').run(access.email, t.id);
+      // El correo de contacto queda igual que el del acceso, para que la ficha no muestre uno distinto
+      control.prepare('UPDATE tenants SET contact_email = ? WHERE id = ?').run(access.email, t.id);
       log(admin.id, t.id, `Dio una clave temporal del panel al titular de «${t.name}»`);
       return { body: access };
     }],

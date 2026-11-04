@@ -180,8 +180,11 @@ async function importFicha(e) {
   try { ficha = JSON.parse(await file.text()); } catch { toast('Ese archivo no es una ficha válida', 'error'); return; }
   const slug = window.prompt(`Subdominio para «${ficha.name ?? 'el cliente'}» (su web quedará en <subdominio>.${st.me.domain}):`, ficha.slug ?? '');
   if (slug === null) return;
+  // El correo de la ficha puede ser de otra instalación (la demo): se confirma aquí. Vacío = sin panel por ahora.
+  const email = window.prompt(`Correo real del titular, para entrar en su panel (vacío = darle acceso más tarde):`, ficha.contact_email ?? '');
+  if (email === null) return;
   try {
-    const t = await api('/tenants/import', { method: 'POST', body: { ficha, slug: slugify(slug) } });
+    const t = await api('/tenants/import', { method: 'POST', body: { ficha, slug: slugify(slug), contact_email: email.trim() } });
     toast(`${t.name} importado`);
     st.tenants = [t, ...st.tenants];
     st.open = t.id;
@@ -380,11 +383,14 @@ async function renderFicha(id) {
 
   // Acceso del titular
   $('[data-owner]', view).addEventListener('click', async () => {
-    let email = t.contact_email;
+    // El correo que esté escrito ahora en «Datos del cliente», aunque aún no se haya guardado
+    let email = $('[data-datos]', view).contact_email.value.trim();
     if (!email) {
       email = window.prompt(`Correo del titular de ${t.name} (con él entrará en su panel):`, '');
       if (!email) return;
-    } else if (owner && !window.confirm(`¿Dar una clave nueva al titular de ${t.name}? La anterior dejará de funcionar y se cerrarán sus sesiones.`)) return;
+    } else if (!window.confirm(owner
+      ? `¿Dar una clave nueva al titular de ${t.name} para entrar con ${email}? La anterior dejará de funcionar y se cerrarán sus sesiones.`
+      : `¿Dar acceso a su panel a ${email}?`)) return;
     try {
       const access = await api(`/tenants/${t.id}/owner`, { method: 'POST', body: { email } });
       st.tenants = await api('/tenants');

@@ -70,6 +70,17 @@ describe('fichas, copias y puesta en marcha', () => {
     assert.equal(t2.web.opiniones[0].texto, 'Muy bien');
     assert.equal(t2.owner_access.email, 'ana@ana.test');
     assert.match((await request(`ana2.${DOMAIN}`, 'GET', '/')).text, /id="vaciados"/);
+
+    // Al importar se puede poner el correo real del titular en lugar del de la ficha
+    const imp3 = (await request(ADMIN, 'POST', '/api/admin/tenants/import', { ficha, slug: 'ana3', contact_email: 'real@ana.test' })).json();
+    assert.equal(imp3.owner_access.email, 'real@ana.test');
+    assert.equal(imp3.contact_email, 'real@ana.test');
+    // Y una clave nueva con otro correo cambia también el correo de contacto
+    const again = (await request(ADMIN, 'POST', `/api/admin/tenants/${imp3.id}/owner`, { email: 'otro@ana.test' })).json();
+    assert.equal(again.email, 'otro@ana.test');
+    const fresh = (await request(ADMIN, 'GET', '/api/admin/tenants')).json().find((x) => x.id === imp3.id);
+    assert.equal(fresh.contact_email, 'otro@ana.test');
+    assert.equal(fresh.owner.email, 'otro@ana.test');
   });
 
   test('la copia de seguridad del día se hace una vez y se puede abrir', async () => {

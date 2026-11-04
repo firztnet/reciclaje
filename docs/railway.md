@@ -76,7 +76,9 @@ El certificado https puede tardar desde unos minutos hasta unas horas. Si se que
 
 1. En la demo de tu ordenador (`1 - Superadministrador`) → su ficha → **Exportar ficha** → se descarga `ficha-elchatarrerodemadrid.json`.
 2. En `https://admin.reciclar.firztnet.es` → **Importar ficha** → elige ese archivo → subdominio `elchatarrerodemadrid`.
-3. En su ficha, en «Datos del cliente», pon su **correo real** y pulsa **Dar acceso a su panel**: le sale su clave temporal.
+3. Te pide el **correo real del titular** (el de la demo es de prueba): escríbelo y sale su clave temporal, una sola
+   vez, con el botón para copiar los datos de acceso. Si lo dejas vacío, se lo das después desde su ficha
+   («Dar acceso a su panel», con el correo escrito en «Datos del cliente»).
 4. Las fotos propias no viajan en la ficha: si las tuviera, súbelas desde su ficha.
 
 ## 5. Comprobar
