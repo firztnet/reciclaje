@@ -6,20 +6,20 @@ La web `www.firztnet.es` y el correo siguen en Hostinger: no se tocan.
 
 ## 0. Subir el código a GitHub
 
-1. En github.com → **New repository** → nombre `plataforma-reciclaje`, **Private**, sin README.
+1. En github.com → **New repository** → nombre `reciclaje`, **Private**, sin README.
 2. En esta carpeta (`plataforma`), desde la terminal:
    ```
    git init -b main
    git add .
    git commit -m "Plataforma de reciclaje"
-   git remote add origin https://github.com/firztnet/plataforma-reciclaje.git
+   git remote add origin https://github.com/firztnet/reciclaje.git
    git push -u origin main
    ```
    No se suben los datos (`data/`, `data-demo/`) ni los `.env`: lo impide `.gitignore`.
 
 ## 1. Crear el servicio
 
-1. Railway → tu proyecto (el de hostelería vale, o **New Project**) → **New** → **GitHub Repo** → `firztnet/plataforma-reciclaje`.
+1. Railway → tu proyecto (el de hostelería vale, o **New Project**) → **New** → **GitHub Repo** → `firztnet/reciclaje`.
 2. En el servicio, **Settings**:
    - **Region**: Europa (EU West, Ámsterdam).
    - **Build**: Railpack (el que viene). Instala Node 24, el indicado en `package.json`. No hay dependencias que instalar.

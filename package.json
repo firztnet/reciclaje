@@ -1,5 +1,5 @@
 {
-  "name": "plataforma-reciclaje",
+  "name": "reciclaje",
   "version": "0.1.0",
   "description": "Plataforma de reciclaje: superadministrador para dar de alta clientes y una web por subdominio para cada uno.",
   "private": true,
