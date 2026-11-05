@@ -241,13 +241,6 @@ details p { margin: 0; padding: 0 1.2em 1.2em; color: var(--muted); }
 /* Pie */
 .footer { padding: 2em 0 2.5em; background: var(--ink); color: #b9c1c7; font-size: .93rem; }
 .footer-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.2em 2em; }
-.print-card { display: flex; align-items: center; gap: 1em; padding: .9em 1.2em; background: var(--steel); border: 1px solid #3a444b; border-left: 4px solid var(--copper); border-radius: var(--radius); color: #fff; text-decoration: none; transition: border-color .15s, transform .15s; }
-.print-card:hover { border-color: var(--copper); transform: translateY(-2px); }
-.print-card svg { width: 34px; height: 34px; padding: 7px; fill: #14171a; background: var(--copper); border-radius: 8px; flex: none; }
-.print-card b { display: block; font-size: 1rem; }
-.print-card small { color: #aab3ba; }
-.print-card i { font-style: normal; font-size: 1.2rem; color: var(--copper); transition: transform .15s; }
-.print-card:hover i { transform: translateX(4px); }
 .footer p { margin: 0; }
 .footer strong { color: #fff; }
 

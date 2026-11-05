@@ -292,11 +292,6 @@ export function renderSite(t) {
   <footer class="footer">
     <div class="wrap footer-wrap">
       <p><strong>${esc(t.name)}</strong><br>${esc(services)}${w.abierto24h ? ' · 24 h' : ''}</p>
-      <a class="print-card" href="cartel.html">
-        ${svg('<path d="M7 3h10v5H7zM5 9h14a3 3 0 0 1 3 3v6h-4v3H6v-3H2v-6a3 3 0 0 1 3-3zm3 7v3h8v-3zm10-4a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>')}
-        <span><b>Cartel para imprimir</b><small>A4 con tiras recortables del teléfono</small></span>
-        <i aria-hidden="true">→</i>
-      </a>
     </div>
   </footer>
 
