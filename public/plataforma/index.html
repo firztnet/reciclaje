@@ -8,18 +8,20 @@
   <title>Superadministrador · Plataforma de reciclaje</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/shared/ui.css">
+  <link rel="stylesheet" href="login.css">
 </head>
 <body>
   <!-- Acceso -->
-  <section class="login" id="login" hidden>
-    <form class="login-card" id="loginForm">
-      <div class="brand"><img src="favicon.svg" alt="" width="42" height="42"><div><small>Superadministrador</small><strong>Plataforma de reciclaje</strong></div></div>
-      <h1>Acceso de control</h1>
-      <p class="muted">Solo para quien gestiona los clientes de la plataforma.</p>
-      <label class="field"><span>Correo</span><input name="email" type="email" required autocomplete="username"></label>
-      <label class="field"><span>Contraseña</span><input name="password" type="password" required autocomplete="current-password"></label>
+  <section class="login lx" id="login" hidden>
+    <form class="lx-card" id="loginForm">
+      <img class="lx-avatar" src="favicon.svg" alt="">
+      <h1 class="lx-title">Reciclaje</h1>
+      <p class="lx-sub">Gestión de chatarrerías y desguaces</p>
+      <label class="lx-field"><svg class="lx-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><input name="email" type="email" required autocomplete="username" placeholder="Correo" aria-label="Correo"></label>
+      <label class="lx-field pw"><svg class="lx-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.2"/></svg><input name="password" type="password" required autocomplete="current-password" placeholder="Contraseña" aria-label="Contraseña"><button type="button" class="lx-eye" aria-label="Mostrar contraseña" aria-pressed="false"></button></label>
       <p class="form-error" id="loginError" role="alert" hidden></p>
-      <button class="btn primary">Entrar</button>
+      <button class="lx-btn">Entrar</button>
+      <p class="lx-foot">Firztnet · Plataforma de reciclaje</p>
     </form>
   </section>
 
