@@ -15,6 +15,9 @@ export function loadConfig(env = process.env) {
     dataAtRisk: Boolean(env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID) && !volume,
     production: env.NODE_ENV === 'production',
     trustProxy: env.TRUST_PROXY === '1',
+    // Firztnet Central (reparaciones): adónde va «Pedir ayuda» y la lista de clientes. Vacío = desactivado.
+    centralUrl: String(env.CENTRAL_URL || '').trim(),
+    centralKey: String(env.CENTRAL_CLAVE || '').trim(),
     admin: {
       name: env.PLATFORM_ADMIN_NAME || '',
       email: env.PLATFORM_ADMIN_EMAIL || '',

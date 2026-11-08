@@ -128,6 +128,17 @@ const MIGRATIONS = [
      created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
    );
    CREATE INDEX idx_payments_tenant ON payments (tenant_id, id);`,
+
+  // 6 · Visitas de la web por día, aparato y origen (Google, Instagram, QR...), sin cookies ni datos personales:
+  // para el informe mensual que Firztnet entrega a cada cliente
+  `CREATE TABLE web_visits_daily (
+     tenant_id  INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+     date       TEXT NOT NULL,
+     device     TEXT NOT NULL,
+     source     TEXT NOT NULL,
+     n          INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (tenant_id, date, device, source)
+   );`,
 ];
 
 export function openControl(dataDir) {

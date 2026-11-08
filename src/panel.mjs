@@ -4,6 +4,7 @@ import { FailureLimiter, HttpError, MIN_PASSWORD, badRequest, cookieHeader, forb
 import { accessOf, readWeb, webOf, SHARED_PHOTOS } from './tenants.mjs';
 import { deletePhoto, listPhotos, photoRefs, savePhoto } from './photos.mjs';
 import * as v from './validate.mjs';
+import { helpRequests, sendHelp } from './central.mjs';
 
 export const OWNER_COOKIE = 'chpanel';
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -77,6 +78,14 @@ export function createPanelApi(control, config) {
       log(t, `El titular de «${t.name}» subió una foto`);
       return { status: 201, body: p };
     }, { raw: true }],
+    // Pedir ayuda a Firztnet: llega a su sistema de reparaciones y aquí se ve la respuesta
+    ['GET', '/ayuda', async (req, { t }) => ({ body: await helpRequests(config, t) })],
+    ['POST', '/ayuda', async (req, { t, body, owner }) => {
+      const res = await sendHelp(config, t, owner, body, req.headers['user-agent']);
+      log(t, `El titular de «${t.name}» pidió ayuda a Firztnet (${res.referencia})`);
+      return { status: 201, body: res };
+    }],
+
     ['DELETE', '/photos/:pid', (req, { t, params }) => {
       deletePhoto(control, config.dataDir, t, v.integer(params.pid, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'La foto' }));
       log(t, `El titular de «${t.name}» borró una foto`);

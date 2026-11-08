@@ -64,6 +64,7 @@ function render() {
   window.scrollTo(0, 0);
   const view = $('#view');
   if (st.tab === 'cuenta') return renderAccount(view);
+  if (st.tab === 'ayuda') return renderHelp(view);
   const a = st.me.tenant.access;
   view.innerHTML = `${a.state === 'prueba' && a.days_left !== null
     ? `<div class="banner">Estás en el periodo de prueba: ${a.days_left === 0 ? 'termina hoy' : `quedan ${a.days_left} día${a.days_left === 1 ? '' : 's'}`}. Para seguir después, habla con quien te hizo la web.</div>` : ''}
@@ -106,6 +107,49 @@ function renderAccount(view) {
       toast('Contraseña cambiada. Se han cerrado tus otras sesiones.');
       f.reset();
     } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+/* ---------- Pedir ayuda a Firztnet ---------- */
+
+const HELP_TYPES = [['web', '🌐', 'Mi web'], ['fotos', '📷', 'Fotos'], ['acceso', '🔑', 'No puedo entrar'], ['datos', '✏️', 'Cambiar datos'], ['otro', '💬', 'Otra cosa']];
+const HELP_STATE = { nueva: ['Recibida', 'new'], en_curso: ['En marcha', 'doing'], resuelta: ['Resuelta', 'done'] };
+const when = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+async function renderHelp(view) {
+  view.innerHTML = '<p class="muted">Cargando…</p>';
+  let data = { enabled: false, requests: [] };
+  try { data = await api('/ayuda'); } catch (err) { view.innerHTML = `<p class="form-error">${esc(err.message)}</p>`; return; }
+  if (!data.enabled) {
+    view.innerHTML = '<div class="pf-head"><h1>Pedir ayuda</h1></div><div class="panel"><p>La ayuda desde el panel todavía no está activada. Llama o escribe a quien te hizo la web y te atendemos.</p></div>';
+    return;
+  }
+  view.innerHTML = `<div class="pf-head"><h1>Pedir ayuda</h1></div>
+    <form class="panel help-form" data-help>
+      <p class="muted small">Cuéntanos qué necesitas y te contestamos lo antes posible. La respuesta te aparece aquí mismo.</p>
+      ${data.offline ? '<p class="banner">Ahora no se pueden ver tus peticiones anteriores, pero puedes enviar una nueva.</p>' : ''}
+      <div class="help-types">${HELP_TYPES.map(([id, ico, label], i) => `<label class="help-type"><input type="radio" name="type" value="${id}" ${i === 0 ? 'checked' : ''}><span><b>${ico}</b>${label}</span></label>`).join('')}</div>
+      <label class="field"><span>Cuéntanos qué pasa</span><textarea name="message" rows="3" maxlength="1000" required placeholder="Por ejemplo: quiero cambiar el teléfono de la web y añadir una foto nueva"></textarea></label>
+      <label class="field"><span>Teléfono para llamarte</span><input name="phone" type="tel" maxlength="30"></label>
+      <label class="help-urgent"><input type="checkbox" name="urgent"> <span><strong>Es urgente</strong> · la web no funciona o no puedo trabajar</span></label>
+      <div><button class="btn primary">Enviar a Firztnet</button></div>
+    </form>
+    ${data.requests.length ? `<div class="panel help-history"><h2>Tus peticiones</h2>${data.requests.map((r) => {
+      const [label, cls] = HELP_STATE[r.estado] ?? HELP_STATE.nueva;
+      return `<article class="help-item"><div class="help-item-top"><strong>${esc(r.referencia)}</strong><span class="help-state ${cls}">${label}</span></div>
+        <p>${esc(r.mensaje)}</p><small class="muted">${when(r.fecha)}</small>
+        ${r.respuesta ? `<div class="help-answer"><span>Firztnet responde</span>${esc(r.respuesta)}</div>` : ''}</article>`;
+    }).join('')}</div>` : ''}`;
+  $('[data-help]', view).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const button = $('button.primary', f);
+    button.disabled = true;
+    try {
+      const res = await api('/ayuda', { method: 'POST', body: { type: f.type.value, message: f.message.value, phone: f.phone.value, urgent: f.urgent.checked } });
+      toast(`Firztnet ya tiene tu petición ${res.referencia}. Te contestaremos lo antes posible.`);
+      renderHelp(view);
+    } catch (err) { toast(err.message, 'error'); button.disabled = false; }
   });
 }
 

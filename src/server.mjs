@@ -12,6 +12,7 @@ import { createPanelApi } from './panel.mjs';
 import { photoPath } from './photos.mjs';
 import { HttpError } from './security.mjs';
 import { accessOf, countVisit, findTenant } from './tenants.mjs';
+import { countDailyVisit } from './central.mjs';
 import { SITE_CSP, esc, renderCartel, renderDatos, renderNotice, renderSite, renderTema } from './web.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -118,7 +119,7 @@ export function createServer(control, config) {
         if (!raw && !type.startsWith('application/json') && Number(req.headers['content-length'] ?? 0) > 0) throw new HttpError(415, 'Se esperaba JSON');
       }
       const body = await readBody(req, raw);
-      const out = call(body, clientIp(req));
+      const out = await call(body, clientIp(req));
       send(res, out.status ?? 200, JSON.stringify(out.body), { ...jsonHeaders, ...(out.headers ?? {}) });
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
@@ -185,7 +186,7 @@ export function createServer(control, config) {
     }
     const page = (body, type) => send(res, 200, body, headers(SITE_CSP, { 'Content-Type': type, 'Cache-Control': 'no-cache' }));
     if (p === '/' || p === '/index.html') {
-      if (req.method === 'GET') countVisit(control, t);
+      if (req.method === 'GET') { countVisit(control, t); countDailyVisit(control, t, req); }
       page(renderSite(t), TYPES['.html']);
       return;
     }

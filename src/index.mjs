@@ -4,6 +4,7 @@ import { openControl } from './db.mjs';
 import { upsertSuperadmin } from './admin.mjs';
 import { scheduleBackups } from './backup.mjs';
 import { createServer } from './server.mjs';
+import { startCentralSync } from './central.mjs';
 
 const config = loadConfig();
 if (config.dataAtRisk) {
@@ -23,12 +24,14 @@ if (!control.prepare('SELECT 1 FROM superadmins LIMIT 1').get()) {
 }
 
 const stopBackups = scheduleBackups(control, config.dataDir);
+// Firztnet Central: la lista de clientes viaja sola a Reparaciones cada 10 minutos
+const stopCentral = startCentralSync(control, config);
 const server = createServer(control, config);
 server.listen(config.port, () => {
   const url = config.production ? `https://admin.${config.domain}` : `http://admin.${config.domain}:${config.port}`;
   console.log(`Plataforma de reciclaje en marcha (puerto ${config.port}) · superadministrador: ${url}`);
 });
 
-const stop = () => { stopBackups(); server.close(); control.close(); process.exit(0); };
+const stop = () => { stopBackups(); stopCentral(); server.close(); control.close(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
