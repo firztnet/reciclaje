@@ -8,6 +8,9 @@ const api = makeApi('/api/admin', () => showLogin());
 
 const initials = (name) => name.split(/\s+/).filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚ]/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '◆';
 const slugify = (text) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+const eur = (cents) => `${((cents ?? 0) / 100).toLocaleString('es-ES', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })} €`;
+const PERIOD = { mensual: 'al mes', trimestral: 'al trimestre', anual: 'al año' };
+const METHOD = { bizum: 'Bizum', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' };
 const tenantUrl = (slug, p = '') => `${location.protocol}//${slug}.${st.me.domain}${location.port ? `:${location.port}` : ''}${p}`;
 
 const stateLine = (t) => {
@@ -15,7 +18,8 @@ const stateLine = (t) => {
   if (a.state === 'prueba') return a.days_left === null ? 'En prueba' : `Quedan ${a.days_left} día${a.days_left === 1 ? '' : 's'} de prueba`;
   if (a.state === 'prueba_vencida') return `Prueba terminada el ${shortDate(t.trial_ends)}`;
   if (a.state === 'suspendido') return t.suspended_reason || 'Suspendido';
-  return t.renews_on ? `Renueva el ${shortDate(t.renews_on)}${a.renewal_due ? ' (vencida)' : ''}` : 'Sin fecha de renovación';
+  if (!t.renews_on) return t.fee_cents ? 'Sin fecha de cobro' : 'Sin cuota';
+  return a.renewal_due ? `Cuota sin pagar desde el ${shortDate(t.renews_on)}` : `Pagado hasta el ${shortDate(t.renews_on)}`;
 };
 
 /* ---------- Entrar ---------- */
@@ -84,8 +88,8 @@ function alertsOf(list) {
     const a = t.access;
     if (a.state === 'prueba' && a.days_left !== null && a.days_left <= 7) out.push(['warn', `La prueba de <strong>${esc(t.name)}</strong> termina ${a.days_left === 0 ? 'hoy' : `en ${a.days_left} día${a.days_left === 1 ? '' : 's'}`}.`, t]);
     if (a.state === 'prueba_vencida') out.push(['danger', `La prueba de <strong>${esc(t.name)}</strong> terminó el ${shortDate(t.trial_ends)}: su web está cerrada.`, t]);
-    if (a.state === 'activo' && a.renewal_due) out.push(['danger', `La renovación de <strong>${esc(t.name)}</strong> venció el ${shortDate(t.renews_on)}.`, t]);
-    else if (a.state === 'activo' && a.days_left !== null && a.days_left <= 7) out.push(['warn', `<strong>${esc(t.name)}</strong> renueva ${a.days_left === 0 ? 'hoy' : `en ${a.days_left} día${a.days_left === 1 ? '' : 's'}`}.`, t]);
+    if (a.state === 'activo' && a.renewal_due) out.push(['danger', `La cuota de <strong>${esc(t.name)}</strong> está sin pagar desde el ${shortDate(t.renews_on)}.`, t]);
+    else if (a.state === 'activo' && a.days_left !== null && a.days_left <= 7) out.push(['warn', `A <strong>${esc(t.name)}</strong> le toca pagar ${a.days_left === 0 ? 'hoy' : `en ${a.days_left} día${a.days_left === 1 ? '' : 's'}`}${t.fee_cents ? ` (${eur(t.fee_cents)})` : ''}.`, t]);
     const idle = t.last_seen_at ? (Date.now() - Date.parse(t.last_seen_at)) / 86_400_000 : null;
     if (a.open && (idle === null ? (Date.now() - Date.parse(t.created_at)) / 86_400_000 > 7 : idle > 14)) {
       out.push(['warn', `La web de <strong>${esc(t.name)}</strong> no tiene visitas ${idle === null ? 'desde el alta' : `desde hace ${Math.floor(idle)} días`}.`, t]);
@@ -106,6 +110,8 @@ function paintTenants() {
   const list = st.tenants;
   const count = (s) => list.filter((t) => (s === 'cerrados' ? !t.access.open : t.access.state === s)).length;
   const visits = list.reduce((s, t) => s + (t.usage?.visits_month ?? 0), 0);
+  const income = list.filter((t) => t.access.state === 'activo').reduce((s, t) => s + (t.billing?.monthly_cents ?? 0), 0);
+  const unpaid = list.filter((t) => t.access.state === 'activo' && t.access.renewal_due).length;
   const alerts = alertsOf(list);
   const q = st.search.toLowerCase();
   const shown = list.filter((t) => (st.filter === 'todos' || (st.filter === 'cerrados' ? !t.access.open : t.access.state === st.filter))
@@ -119,6 +125,7 @@ function paintTenants() {
       <div class="stat"><span>Activos</span><strong>${count('activo')}</strong><small class="muted">de ${list.length} clientes</small></div>
       <div class="stat"><span>En prueba</span><strong>${count('prueba')}</strong><small class="muted">${list.filter((t) => t.access.state === 'prueba' && t.access.days_left !== null && t.access.days_left <= 7).length} terminan esta semana</small></div>
       <div class="stat"><span>Cerrados</span><strong>${count('cerrados')}</strong><small class="muted">suspendidos o prueba terminada</small></div>
+      <div class="stat"><span>Ingresos al mes</span><strong>${eur(income)}</strong><small class="muted">${unpaid ? `${unpaid} con la cuota sin pagar` : 'de los clientes activos'}</small></div>
       <div class="stat"><span>Visitas este mes</span><strong>${visits}</strong><small class="muted">entre todas sus webs</small></div>
     </div>
     ${alerts.length ? `<div class="pf-alerts">${alerts.map(([k, text, t]) => `<div class="pf-alert ${k}"><span>${text}</span><button class="link" data-open="${t.id}">Ver</button></div>`).join('')}</div>` : ''}
@@ -132,7 +139,7 @@ function paintTenants() {
       <div class="meta">
         <div><span>Visitas mes</span><strong>${t.usage.visits_month}</strong></div>
         <div><span>Opiniones</span><strong>${t.usage.reviews}</strong></div>
-        <div><span>Fotos</span><strong>${t.photos.length}</strong></div>
+        <div><span>Cuota</span><strong>${t.fee_cents ? `${eur(t.fee_cents)}` : '—'}</strong></div>
       </div>
       <footer><span>${esc(t.contact_name || '—')} · ${esc(fmtPhone(t.web.telefono))}</span>
         <span>${t.owner ? (t.owner.pending ? '<span class="tag warn">clave sin estrenar</span>' : '<span class="tag ok">usa su panel</span>') : 'sin panel'}</span></footer>
@@ -299,14 +306,38 @@ async function renderFicha(id) {
         <section class="panel">
           <h2>Estado</h2>
           <div class="status-actions">
-            <div class="row"><label class="field"><span>Activo, renueva el</span><input name="renews_on" type="date" value="${esc(t.renews_on ?? plus(365))}"></label>
-              <button type="button" class="btn primary small" data-status="activo">${t.status === 'activo' ? 'Actualizar' : 'Activar'}</button></div>
+            ${t.status === 'activo' ? '' : `<div class="row"><span class="muted small grow">Activo: su web funciona. Hasta cuándo está pagado se lleva en «Cuota y cobros».</span>
+              <button type="button" class="btn primary small" data-status="activo">Activar</button></div>`}
             <div class="row"><label class="field"><span>En prueba hasta</span><input name="trial_ends" type="date" value="${esc(t.trial_ends ?? plus(30))}"></label>
               <button type="button" class="btn ghost small" data-status="prueba">${t.status === 'prueba' ? 'Cambiar fecha' : 'Poner en prueba'}</button></div>
             <div class="row"><label class="field"><span>Motivo de la suspensión</span><input name="suspended_reason" value="${esc(t.suspended_reason)}" maxlength="200" placeholder="Pago pendiente, baja…"></label>
               <button type="button" class="btn danger small" data-status="suspendido">Suspender</button></div>
             <p class="muted small">Suspendido o con la prueba terminada, su web y su panel muestran un aviso. Su ficha y sus fotos se conservan: al activarlo, todo vuelve como estaba.</p>
           </div>
+        </section>
+
+        <section class="panel">
+          <h2>Cuota y cobros</h2>
+          ${(() => {
+            if (!t.fee_cents) return '<p class="muted small">Todavía no tiene cuota. Ponla aquí debajo para que el sistema te avise de cuándo le toca pagar.</p>';
+            if (!t.renews_on) return `<p class="pay-state"><strong>${eur(t.fee_cents)} ${PERIOD[t.billing_period]}</strong><span class="muted small">Sin fecha: apunta su primer pago o pon hasta cuándo tiene pagado.</span></p>`;
+            const left = Math.round((Date.parse(`${t.renews_on}T00:00:00Z`) - Date.parse(`${st.me.today}T00:00:00Z`)) / 86_400_000);
+            return `<p class="pay-state ${left < 0 ? 'due' : left <= 7 ? 'soon' : 'ok'}"><strong>${eur(t.fee_cents)} ${PERIOD[t.billing_period]}</strong>
+              <span>${left < 0 ? `Sin pagar desde el ${shortDate(t.renews_on)} (hace ${-left} día${left === -1 ? '' : 's'})`
+                : `Pagado hasta el ${shortDate(t.renews_on)} · ${left === 0 ? 'le toca hoy' : `le toca en ${left} día${left === 1 ? '' : 's'}`}`}</span></p>`;
+          })()}
+          <div class="head-actions">
+            <button type="button" class="btn primary small" data-pay ${t.fee_cents ? '' : 'disabled'}>Apuntar pago</button>
+            ${t.billing.reminder_url ? `<a class="btn ghost small" href="${esc(t.billing.reminder_url)}" target="_blank" rel="noopener">Recordar por WhatsApp</a>` : ''}
+          </div>
+          <form class="form-grid mt" data-fee novalidate>
+            <label class="field"><span>Cuota (€)</span><input name="fee" inputmode="decimal" value="${t.fee_cents ? esc(String(t.fee_cents / 100).replace('.', ',')) : ''}" placeholder="25"></label>
+            <label class="field"><span>Se paga</span><select name="billing_period">${st.me.periods.map((p) => `<option value="${p}" ${p === t.billing_period ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>`).join('')}</select></label>
+            <label class="field full"><span>Pagado hasta <small>(cada pago lo adelanta solo)</small></span><input name="renews_on" type="date" value="${esc(t.renews_on ?? '')}"></label>
+            <div class="full"><button class="btn ghost small">Guardar cuota</button></div>
+          </form>
+          <h3 class="mt">Pagos</h3>
+          <div class="payments" data-payments><p class="muted small">Cargando…</p></div>
         </section>
 
         <section class="panel">
@@ -379,7 +410,6 @@ async function renderFicha(id) {
   $$('[data-status]', view).forEach((b) => b.addEventListener('click', async () => {
     const status = b.dataset.status;
     const body = { status };
-    if (status === 'activo') body.renews_on = $('[name=renews_on]', view).value || null;
     if (status === 'prueba') body.trial_ends = $('[name=trial_ends]', view).value;
     if (status === 'suspendido') {
       body.suspended_reason = $('[name=suspended_reason]', view).value;
@@ -392,6 +422,68 @@ async function renderFicha(id) {
       renderFicha(t.id);
     } catch (err) { toast(err.message, 'error'); }
   }));
+
+  // Cuota y cobros
+  const paymentsBox = $('[data-payments]', view);
+  const paintPayments = async () => {
+    try {
+      const list = await api(`/tenants/${t.id}/payments`);
+      paymentsBox.innerHTML = list.length ? list.map((p, i) => `<div class="pay-row">
+          <span><strong>${eur(p.amount_cents)}</strong> · ${shortDate(p.paid_on)}${p.method ? ` · ${esc(METHOD[p.method] ?? p.method)}` : ''}
+            <small>Pagado hasta el ${shortDate(p.covers_until)}${p.note ? ` · ${esc(p.note)}` : ''}</small></span>
+          ${i === 0 ? `<button type="button" class="link danger-link" data-undo="${p.id}">Anular</button>` : ''}
+        </div>`).join('') : '<p class="muted small">Todavía no hay pagos apuntados.</p>';
+      $('[data-undo]', paymentsBox)?.addEventListener('click', async (e) => {
+        if (!window.confirm('¿Anular este pago? La fecha de «pagado hasta» vuelve a la de antes.')) return;
+        try {
+          const r = await api(`/tenants/${t.id}/payments/${e.target.dataset.undo}/undo`, { method: 'POST' });
+          replace(r.tenant);
+          toast('Pago anulado');
+          renderFicha(t.id);
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    } catch (err) { paymentsBox.innerHTML = `<p class="form-error">${esc(err.message)}</p>`; }
+  };
+  paintPayments();
+
+  $('[data-fee]', view).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    try {
+      const updated = await api(`/tenants/${t.id}`, { method: 'PATCH', body: { fee: f.fee.value || '0', billing_period: f.billing_period.value, renews_on: f.renews_on.value || null } });
+      replace(updated);
+      toast('Cuota guardada');
+      renderFicha(t.id);
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  $('[data-pay]', view).addEventListener('click', () => {
+    const dlg = openDialog(`<form method="dialog" novalidate>
+      <div class="dlg-head"><h2>Apuntar pago · ${esc(t.name)}</h2><button type="button" class="btn ghost small" data-close>Cerrar</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Importe (€)</span><input name="amount" inputmode="decimal" value="${esc(String(t.fee_cents / 100).replace('.', ','))}" required></label>
+        <label class="field"><span>Fecha del pago</span><input name="paid_on" type="date" value="${esc(st.me.today)}" required></label>
+        <label class="field"><span>Forma de pago</span><select name="method">${st.me.methods.map((m) => `<option value="${m}">${METHOD[m] ?? m}</option>`).join('')}</select></label>
+        <label class="field"><span>Nota (opcional)</span><input name="note" maxlength="200"></label>
+      </div>
+      <p class="muted small">Queda pagado un periodo más (${esc(PERIOD[t.billing_period])}), contando desde ${t.renews_on ? `el ${shortDate(t.renews_on)}, hasta donde ya tenía pagado` : 'la fecha del pago'}.</p>
+      <p class="form-error" data-error hidden></p>
+      <div class="dlg-foot"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn primary" value="ok">Apuntar pago</button></div>
+    </form>`);
+    const form = $('form', dlg);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = $('[data-error]', form);
+      error.hidden = true;
+      try {
+        const r = await api(`/tenants/${t.id}/payments`, { method: 'POST', body: Object.fromEntries(new FormData(form)) });
+        dlg.close();
+        replace(r.tenant);
+        toast(`Pago apuntado: pagado hasta el ${shortDate(r.payment.covers_until)}`);
+        renderFicha(t.id);
+      } catch (err) { error.textContent = err.message; error.hidden = false; }
+    });
+  });
 
   // Acceso del titular
   $('[data-owner]', view).addEventListener('click', async () => {

@@ -111,6 +111,23 @@ const MIGRATIONS = [
      sent_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
      PRIMARY KEY (announcement_id, tenant_id)
    );`,
+
+  // 5 · Cuota de cada cliente y sus pagos. «renews_on» pasa a ser «pagado hasta / próximo cobro».
+  `ALTER TABLE tenants ADD COLUMN fee_cents INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE tenants ADD COLUMN billing_period TEXT NOT NULL DEFAULT 'mensual' CHECK (billing_period IN ('mensual', 'trimestral', 'anual'));
+   CREATE TABLE payments (
+     id               INTEGER PRIMARY KEY,
+     tenant_id        INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+     amount_cents     INTEGER NOT NULL,
+     paid_on          TEXT NOT NULL,              -- AAAA-MM-DD
+     method           TEXT NOT NULL DEFAULT '',   -- bizum, transferencia, efectivo…
+     note             TEXT NOT NULL DEFAULT '',
+     covers_until     TEXT NOT NULL,              -- hasta qué día queda pagado con este pago
+     prev_renews_on   TEXT,                       -- para poder anularlo y dejarlo como estaba
+     created_by       INTEGER REFERENCES superadmins(id),
+     created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX idx_payments_tenant ON payments (tenant_id, id);`,
 ];
 
 export function openControl(dataDir) {

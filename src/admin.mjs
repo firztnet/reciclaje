@@ -11,6 +11,7 @@ import * as v from './validate.mjs';
 import { grantOwner, ownerSummary } from './owners.mjs';
 import { cancelAnnouncement, createAnnouncement, markSent, whatsappMessage, whenText } from './announcements.mjs';
 import { deletePhoto, listPhotos, photoRefs, savePhoto } from './photos.mjs';
+import { METHODS, PERIODS, listPayments, money, monthlyCents, readBilling, recordPayment, reminderUrl, undoPayment } from './billing.mjs';
 
 export const ADMIN_COOKIE = 'chsid';
 const FICHA_FORMAT = 'reciclaje-cliente';
@@ -32,7 +33,14 @@ export function upsertSuperadmin(control, { name, email, password }) {
 export function createAdminApi(control, config) {
   const log = (adminId, tenantId, summary) =>
     control.prepare('INSERT INTO admin_activity (admin_id, tenant_id, summary) VALUES (?, ?, ?)').run(adminId, tenantId, summary.slice(0, 300));
-  const present = (t) => ({ ...t, web: webOf(t), access: accessOf(t), usage: usageOf(control, t), owner: ownerSummary(control, t), photos: listPhotos(control, t) });
+  const present = (t) => ({
+    ...t, web: webOf(t), access: accessOf(t), usage: usageOf(control, t), owner: ownerSummary(control, t), photos: listPhotos(control, t),
+    billing: {
+      monthly_cents: monthlyCents(t),
+      reminder_url: reminderUrl(t),
+      last_payment: control.prepare('SELECT amount_cents, paid_on, method FROM payments WHERE tenant_id = ? ORDER BY id DESC LIMIT 1').get(t.id) ?? null,
+    },
+  });
   const idOf = (raw) => v.integer(raw, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'El cliente' });
 
   const sessionAdmin = (req) => {
@@ -69,7 +77,7 @@ export function createAdminApi(control, config) {
       return { body: { ok: true }, headers: { 'Set-Cookie': cookieHeader(ADMIN_COOKIE, '', { maxAgeSeconds: 0, secure: config.production }) } };
     }, { public: true }],
 
-    ['GET', '/me', (req, { admin }) => ({ body: { name: admin.name, email: admin.email, domain: config.domain, today: todayStr(), photos: SHARED_PHOTOS } })],
+    ['GET', '/me', (req, { admin }) => ({ body: { name: admin.name, email: admin.email, domain: config.domain, today: todayStr(), photos: SHARED_PHOTOS, periods: Object.keys(PERIODS), methods: METHODS } })],
 
     ['GET', '/tenants', () => ({ body: control.prepare('SELECT * FROM tenants ORDER BY created_at DESC').all().map(present) })],
 
@@ -90,7 +98,7 @@ export function createAdminApi(control, config) {
         body: {
           formato: FICHA_FORMAT, version: 1, exportada: new Date().toISOString(),
           slug: t.slug, name: t.name, contact_name: t.contact_name, contact_email: t.contact_email, contact_phone: t.contact_phone,
-          company_name: t.company_name, tax_id: t.tax_id, notes: t.notes, web: webOf(t),
+          company_name: t.company_name, tax_id: t.tax_id, notes: t.notes, fee_cents: t.fee_cents, billing_period: t.billing_period, web: webOf(t),
         },
         headers: { 'Content-Disposition': `attachment; filename="ficha-${t.slug}.json"` },
       };
@@ -115,6 +123,10 @@ export function createAdminApi(control, config) {
       }, defaultWeb(input));
       const t = createTenant(control, input, web);
       if (f.contact_phone) control.prepare('UPDATE tenants SET contact_phone = ? WHERE id = ?').run(v.phone(f.contact_phone), t.id);
+      if (f.fee_cents) {
+        const billing = readBilling({ fee: (f.fee_cents / 100).toFixed(2), billing_period: f.billing_period ?? 'mensual' }, t);
+        control.prepare('UPDATE tenants SET fee_cents = ?, billing_period = ? WHERE id = ?').run(billing.fee_cents, billing.billing_period, t.id);
+      }
       log(admin.id, t.id, `Dio de alta a «${t.name}» (${t.slug}) desde una ficha exportada`);
       const owner_access = input.contact_email ? grantOwner(control, t, { name: input.contact_name, email: input.contact_email }) : null;
       return { status: 201, body: { ...present(getTenant(control, t.id)), owner_access } };
@@ -138,14 +150,33 @@ export function createAdminApi(control, config) {
         company_name: keep('company_name', (x) => v.text(x, { max: 120, name: 'La razón social' })),
         tax_id: keep('tax_id', (x) => v.text(x, { max: 20, name: 'El NIF' }).toUpperCase()),
         notes: keep('notes', (x) => v.longText(x, { max: 1000, name: 'Las notas' })),
+        ...readBilling(body, t),
       };
       if (next.status === 'prueba' && !next.trial_ends) throw badRequest('Indica hasta qué día dura la prueba');
       control.prepare(`UPDATE tenants SET status = ?, name = ?, trial_ends = ?, renews_on = ?, suspended_reason = ?, contact_name = ?,
-        contact_email = ?, contact_phone = ?, company_name = ?, tax_id = ?, notes = ? WHERE id = ?`).run(next.status, next.name, next.trial_ends,
-        next.renews_on, next.suspended_reason, next.contact_name, next.contact_email, next.contact_phone, next.company_name, next.tax_id, next.notes, t.id);
-      const what = { prueba: `en prueba hasta ${next.trial_ends}`, activo: `activo${next.renews_on ? ` (renueva el ${next.renews_on})` : ''}`, suspendido: `suspendido${next.suspended_reason ? `: ${next.suspended_reason}` : ''}` }[next.status];
-      log(admin.id, t.id, t.status !== next.status ? `Puso a «${next.name}» ${what}` : `Modificó los datos de «${next.name}»`);
+        contact_email = ?, contact_phone = ?, company_name = ?, tax_id = ?, notes = ?, fee_cents = ?, billing_period = ? WHERE id = ?`).run(next.status, next.name, next.trial_ends,
+        next.renews_on, next.suspended_reason, next.contact_name, next.contact_email, next.contact_phone, next.company_name, next.tax_id, next.notes,
+        next.fee_cents, next.billing_period, t.id);
+      const what = { prueba: `en prueba hasta ${next.trial_ends}`, activo: `activo${next.renews_on ? ` (pagado hasta el ${next.renews_on})` : ''}`, suspendido: `suspendido${next.suspended_reason ? `: ${next.suspended_reason}` : ''}` }[next.status];
+      const feeChanged = next.fee_cents !== t.fee_cents || next.billing_period !== t.billing_period;
+      log(admin.id, t.id, t.status !== next.status ? `Puso a «${next.name}» ${what}`
+        : feeChanged ? `Puso la cuota de «${next.name}» en ${money(next.fee_cents)} ${next.billing_period}` : `Modificó los datos de «${next.name}»`);
       return { body: present(getTenant(control, t.id)) };
+    }],
+
+    /* Pagos de la cuota */
+    ['GET', '/tenants/:id/payments', (req, { params }) => ({ body: listPayments(control, getTenant(control, idOf(params.id))) })],
+    ['POST', '/tenants/:id/payments', (req, { body, admin, params }) => {
+      const t = getTenant(control, idOf(params.id));
+      const p = recordPayment(control, t, body, admin.id);
+      log(admin.id, t.id, `Apuntó un pago de ${money(p.amount_cents)} de «${t.name}»: pagado hasta el ${p.covers_until}`);
+      return { status: 201, body: { payment: p, tenant: present(getTenant(control, t.id)) } };
+    }],
+    ['POST', '/tenants/:id/payments/:pid/undo', (req, { admin, params }) => {
+      const t = getTenant(control, idOf(params.id));
+      const p = undoPayment(control, t, v.integer(params.pid, { min: 1, max: Number.MAX_SAFE_INTEGER, name: 'El pago' }));
+      log(admin.id, t.id, `Anuló el pago de ${money(p.amount_cents)} del ${p.paid_on} de «${t.name}»`);
+      return { body: { tenant: present(getTenant(control, t.id)) } };
     }],
 
     // Contenido de su web: teléfonos, servicios, zonas, opiniones, trabajos…

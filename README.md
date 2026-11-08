@@ -29,6 +29,11 @@ Manuel (cabecera, recogida, vaciados, formulario a WhatsApp, zonas, opiniones, t
 - **Comunicados** a los clientes (mantenimiento con día y hora, aviso o novedad), **solo por WhatsApp**: cada
   comunicado tiene la lista de clientes con un botón «Enviar» que abre WhatsApp en su número con el mensaje ya
   escrito y su nombre. Queda apuntado a quién se ha enviado («Enviado a 3 de 5»).
+- **Cuota y cobros** en la ficha de cada cliente: importe y si paga al mes, al trimestre o al año, y hasta cuándo
+  está pagado. «Apuntar pago» lo adelanta un periodo (y saca al cliente de la prueba); el último pago se puede anular.
+  Arriba salen los **ingresos al mes** de los clientes activos y avisos de a quién le toca pagar o lo tiene vencido,
+  con «Recordar por WhatsApp» para mandarle el recordatorio ya escrito. Si no paga, la web sigue abierta: tú decides
+  cuándo suspenderlo.
 - **Estados**: en prueba hasta una fecha, activo con renovación opcional, o suspendido con motivo. Suspendido o
   con la prueba terminada, su web muestra un aviso; su ficha se conserva y al activarlo todo vuelve como estaba.
 - **Eliminar**: solo si está suspendido y escribiendo su subdominio. La ficha se guarda aparte (`deleted_tenants`).
