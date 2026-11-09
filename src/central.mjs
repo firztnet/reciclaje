@@ -4,6 +4,8 @@
 //  · las visitas de la web de cada cliente por día, aparato y origen (fase 4).
 // Todo de servidor a servidor con la clave propia de este sistema (CENTRAL_CLAVE): el navegador nunca la ve.
 // Solo datos del negocio (el cliente de Firztnet), nunca de las personas que visitan su web.
+import fs from 'node:fs';
+import path from 'node:path';
 import { HttpError, badRequest } from './security.mjs';
 import { accessOf } from './tenants.mjs';
 import { todayStr } from './tenants.mjs';
@@ -150,11 +152,21 @@ export function tenantSnapshot(control, config, t) {
   };
 }
 
+// Última copia de seguridad de la plataforma (todos los clientes están en la misma base)
+export function lastBackup(config) {
+  try {
+    const dir = path.join(config.dataDir, 'backups-plataforma');
+    const times = fs.readdirSync(dir).filter((f) => f.endsWith('.db')).map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
+    return times.length ? new Date(Math.max(...times)).toISOString() : null;
+  } catch { return null; }
+}
+
 export async function sendTenants(control, config) {
   if (!centralEnabled(config)) return false;
   const tenants = control.prepare('SELECT * FROM tenants ORDER BY id').all();
+  const copia = lastBackup(config);
   try {
-    await call(config, '/locales', { method: 'POST', body: JSON.stringify({ locales: tenants.map((t) => tenantSnapshot(control, config, t)) }) });
+    await call(config, '/locales', { method: 'POST', body: JSON.stringify({ locales: tenants.map((t) => ({ ...tenantSnapshot(control, config, t), ultima_copia: copia })), copia_sistema: { ultima: copia, detalle: 'Copia diaria de la base de la plataforma' } }) });
     return true;
   } catch (err) {
     console.error('No se pudo mandar la lista de clientes a Firztnet Central:', err.message);
