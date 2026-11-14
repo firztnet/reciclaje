@@ -99,3 +99,57 @@ describe('cobros en el panel', () => {
     assert.equal(list[0].method, 'bizum');
   });
 });
+
+describe('cobro apuntado desde Firztnet Central', () => {
+  let dir, control, server, port, cookie = '';
+  const CLAVE = 'clave-de-central-de-prueba-123456';
+  const request = (method, urlPath, body, extra = {}) => new Promise((resolve, reject) => {
+    const data = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    const headers = { Host: ADMIN, ...(cookie ? { Cookie: cookie } : {}), ...extra };
+    if (method !== 'GET') headers.Origin = `http://${ADMIN}`;
+    if (data) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = data.length; }
+    const req = http.request({ host: '127.0.0.1', port, method, path: urlPath, headers }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => {
+        const set = res.headers['set-cookie']?.[0]?.split(';')[0];
+        if (set) cookie = set;
+        resolve({ status: res.statusCode, text, json: () => JSON.parse(text) });
+      });
+    });
+    req.on('error', reject);
+    req.end(data);
+  });
+
+  let t;
+  before(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reciclar-central-pago-'));
+    control = openControl(dir);
+    upsertSuperadmin(control, { name: 'Prueba', email: 'admin@prueba.test', password: 'clave-de-prueba-1' });
+    server = createServer(control, { domain: DOMAIN, dataDir: dir, production: false, trustProxy: false, centralKey: CLAVE });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    port = server.address().port;
+    await request('POST', '/api/admin/login', { email: 'admin@prueba.test', password: 'clave-de-prueba-1' });
+    t = (await request('POST', '/api/admin/tenants', { name: 'Metales Sur', slug: 'metales-sur', barrio: 'Vallecas', telefono: '611000111', contact_name: 'Rafa', trial_days: 15 })).json();
+    await request('PATCH', `/api/admin/tenants/${t.id}`, { fee: '30', billing_period: 'mensual', renews_on: '2026-11-10' });
+  });
+  after(() => { server.close(); control.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+  test('sin la clave de este sistema no entra', async () => {
+    assert.equal((await request('POST', '/api/central/pago', { slug: 'metales-sur' })).status, 401);
+    assert.equal((await request('POST', '/api/central/pago', { slug: 'metales-sur' }, { 'X-Firztnet-Clave': 'otra-clave' })).status, 401);
+  });
+  test('dos cuotas adelantan dos meses y sacan de la prueba', async () => {
+    const r = await request('POST', '/api/central/pago', { slug: 'metales-sur', cuotas: 2, importe: 60, metodo: 'Bizum' }, { 'X-Firztnet-Clave': CLAVE });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json().renueva, '2027-01-10');
+    const lista = (await request('GET', `/api/admin/tenants/${t.id}/payments`)).json();
+    assert.equal(lista[0].amount_cents, 6000);
+    assert.equal(lista[0].method, 'bizum');
+    assert.equal(control.prepare('SELECT status FROM tenants WHERE id = ?').get(t.id).status, 'activo');
+  });
+  test('un cliente que no existe', async () => {
+    assert.equal((await request('POST', '/api/central/pago', { slug: 'no-existe' }, { 'X-Firztnet-Clave': CLAVE })).status, 404);
+  });
+});

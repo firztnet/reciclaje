@@ -42,16 +42,17 @@ export function listPayments(control, t) {
     WHERE p.tenant_id = ? ORDER BY p.id DESC LIMIT 50`).all(t.id);
 }
 
-// Apunta un pago y adelanta el «pagado hasta» un periodo. Si estaba en prueba, pasa a activo.
+// Apunta un pago y adelanta el «pagado hasta» un periodo (o varios: «cuotas»). Si estaba en prueba, pasa a activo.
 export function recordPayment(control, t, body, adminId) {
-  const amount = body.amount === undefined || body.amount === '' ? t.fee_cents : euros(body.amount);
+  const cuotas = body.cuotas === undefined || body.cuotas === '' ? 1 : v.integer(body.cuotas, { min: 1, max: 24, name: 'Las cuotas' });
+  const amount = body.amount === undefined || body.amount === '' ? t.fee_cents * cuotas : euros(body.amount);
   if (!amount) throw badRequest('Pon el importe del pago (o la cuota del cliente)');
   const paidOn = body.paid_on ? v.date(body.paid_on, 'La fecha del pago') : todayStr();
   const method = body.method ? v.oneOf(body.method, METHODS, 'La forma de pago') : '';
   const note = v.text(body.note, { max: 200, name: 'La nota' });
   // Se cuenta desde lo que ya estaba pagado; si no había fecha, desde el día del pago
   const from = t.renews_on || paidOn;
-  const coversUntil = addMonths(from, PERIODS[t.billing_period]);
+  const coversUntil = addMonths(from, PERIODS[t.billing_period] * cuotas);
   const id = Number(control.prepare(`INSERT INTO payments (tenant_id, amount_cents, paid_on, method, note, covers_until, prev_renews_on, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(t.id, amount, paidOn, method, note, coversUntil, t.renews_on, adminId).lastInsertRowid);
   control.prepare(`UPDATE tenants SET renews_on = ?, status = CASE WHEN status = 'prueba' THEN 'activo' ELSE status END WHERE id = ?`).run(coversUntil, t.id);

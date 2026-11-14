@@ -10,7 +10,9 @@ import { ROOT } from './config.mjs';
 import { createAdminApi } from './admin.mjs';
 import { createPanelApi } from './panel.mjs';
 import { photoPath } from './photos.mjs';
+import { timingSafeEqual } from 'node:crypto';
 import { HttpError } from './security.mjs';
+import { METHODS, money, recordPayment } from './billing.mjs';
 import { accessOf, countVisit, findTenant } from './tenants.mjs';
 import { countDailyVisit } from './central.mjs';
 import { SITE_CSP, esc, renderCartel, renderDatos, renderNotice, renderSite, renderTema } from './web.mjs';
@@ -200,6 +202,29 @@ export function createServer(control, config) {
     notice(res, 404, 'No encontrado', 'Esta página no existe.');
   }
 
+  const centralPayment = async (req, res) => {
+    const json = (status, data) => send(res, status, JSON.stringify(data), { ...BASE_HEADERS, 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
+    const key = String(req.headers['x-firztnet-clave'] ?? '');
+    if (!config.centralKey || key.length !== config.centralKey.length || !timingSafeEqual(Buffer.from(key), Buffer.from(config.centralKey))) {
+      json(401, { error: 'Clave no válida' }); return;
+    }
+    try {
+      const body = await readBody(req, false);
+      const t = findTenant(control, String(body.slug ?? ''));
+      if (!t) { json(404, { error: 'Ese cliente no existe en Reciclaje' }); return; }
+      const metodo = String(body.metodo ?? '').toLowerCase();
+      const p = recordPayment(control, t, {
+        cuotas: body.cuotas, amount: body.importe === undefined || body.importe === null ? undefined : String(body.importe).replace('.', ','),
+        method: METHODS.find((m) => metodo.includes(m)) ?? (metodo ? 'otro' : ''), note: String(body.nota ?? 'Apuntado desde Firztnet Central').slice(0, 200),
+      }, null);
+      control.prepare('INSERT INTO admin_activity (admin_id, tenant_id, summary) VALUES (NULL, ?, ?)')
+        .run(t.id, `Firztnet Central apuntó un pago de ${money(p.amount_cents)} de «${t.name}»: pagado hasta el ${p.covers_until}`.slice(0, 300));
+      json(200, { ok: true, renueva: p.covers_until });
+    } catch (err) {
+      json(err instanceof HttpError ? err.status : 500, { error: err instanceof HttpError ? err.message : 'Error al apuntar el pago' });
+    }
+  };
+
   return http.createServer(async (req, res) => {
     try {
       if (!['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) { send(res, 405, '', BASE_HEADERS); return; }
@@ -210,6 +235,8 @@ export function createServer(control, config) {
         send(res, 200, '{"ok":true}', { ...BASE_HEADERS, 'Content-Type': TYPES['.json'], 'Cache-Control': 'no-store' });
         return;
       }
+      // Firztnet Central apunta el cobro de una cuota (con la clave de este sistema): igual que desde el panel
+      if (url.pathname === '/api/central/pago' && req.method === 'POST') { await centralPayment(req, res); return; }
       if (url.pathname.startsWith('/_aviso/') && serveFile(res, path.join(PUBLIC, '_aviso'), url.pathname.slice('/_aviso/'.length), NOTICE_CSP)) return;
       if (host === `admin.${domain}`) { await adminHost(req, res, url); return; }
       if (host.endsWith(`.${domain}`)) {
